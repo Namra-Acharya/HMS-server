@@ -24,7 +24,7 @@ import cors from 'cors';
 import routes from './routes.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
 const corsOptions = {
@@ -67,11 +67,34 @@ async function startServer() {
       res.status(500).json({ success: false, error: err.message || 'Internal Server Error' });
     });
 
-    // Start listening
+    // Start listening with fallback ports
+    const portOptions = [PORT, 3005, 3006, 3007, 3008, 3009];
+    let portIndex = 0;
+
+    const startServer = () => {
+      if (portIndex >= portOptions.length) {
+        throw new Error('No available ports found');
+      }
+
+      const attemptPort = portOptions[portIndex];
+      const server = app.listen(attemptPort, () => {
+        console.log(`[SERVER] ✅ Server running on port ${attemptPort}`);
+        // Save the port that the server is actually running on
+        process.env.ACTUAL_PORT = attemptPort;
+        console.log(`[SERVER] Server accessible at http://localhost:${attemptPort}`);
+      }).on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.log(`[SERVER] Port ${attemptPort} in use, trying next port...`);
+          portIndex++;
+          startServer();
+        } else {
+          throw err;
+        }
+      });
+    };
+
     console.log('[SERVER] Listening on port', PORT);
-    app.listen(PORT, () => {
-      console.log(`[SERVER] ✅ Server running on port ${PORT}`);
-    });
+    startServer();
   } catch (error) {
     console.error('[SERVER] Startup failed:', error.message);
     console.error('[SERVER] Stack:', error.stack);
