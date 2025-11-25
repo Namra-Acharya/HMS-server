@@ -22,6 +22,7 @@ console.log('[SERVER] Environment loaded. PORT:', process.env.PORT || 3001);
 import express from 'express';
 import cors from 'cors';
 import routes from './routes.js';
+import { initializeStorage } from './storageDb.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -41,6 +42,15 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 async function startServer() {
   try {
     console.log('[SERVER] Starting server...');
+
+    // Initialize persistent storage for authentication
+    try {
+      initializeStorage();
+      console.log('[SERVER] Persistent storage initialized');
+    } catch (error) {
+      console.error('[SERVER] Failed to initialize persistent storage:', error.message);
+      throw error;
+    }
 
     // Initialize Database only if MONGO_URI is set
     if (process.env.MONGO_URI) {

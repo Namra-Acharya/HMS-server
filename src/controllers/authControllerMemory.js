@@ -1,10 +1,5 @@
 import crypto from 'crypto';
-
-// In-memory storage for password (will reset on server restart)
-let passwordStorage = {
-  password: null,
-  passwordSet: false
-};
+import { getSetting, updateSetting, getDatabase } from '../storageDb.js';
 
 const hashPassword = (password) => {
   return crypto.createHash('sha256').update(password).digest('hex');
@@ -22,8 +17,11 @@ export const initializePassword = (req, res) => {
       return res.status(400).json({ success: false, error: 'Password must be at least 4 characters' });
     }
 
-    passwordStorage.password = hashPassword(password);
-    passwordStorage.passwordSet = true;
+    const hashedPassword = hashPassword(password);
+    updateSetting({
+      password: hashedPassword,
+      passwordSet: true
+    });
 
     console.log('[AUTH] Password initialized successfully');
     res.json({ success: true, message: 'Password set successfully' });
@@ -38,15 +36,17 @@ export const verifyPassword = (req, res) => {
     const { password } = req.body;
 
     console.log('[AUTH] verifyPassword called');
-    console.log('[AUTH] passwordSet:', passwordStorage.passwordSet);
-    console.log('[AUTH] password received:', password ? 'yes' : 'no');
 
     if (!password || typeof password !== 'string') {
       console.log('[AUTH] Password missing or invalid type in request');
       return res.status(400).json({ success: false, error: 'Password is required' });
     }
 
-    if (!passwordStorage.passwordSet) {
+    const settings = getSetting();
+    console.log('[AUTH] passwordSet:', settings?.passwordSet);
+    console.log('[AUTH] password received:', password ? 'yes' : 'no');
+
+    if (!settings || !settings.passwordSet) {
       console.log('[AUTH] Password not set in storage');
       return res.status(400).json({ success: false, error: 'Password not configured yet' });
     }
@@ -54,7 +54,7 @@ export const verifyPassword = (req, res) => {
     const hashedInput = hashPassword(password);
     console.log('[AUTH] Comparing hashes...');
 
-    if (hashedInput === passwordStorage.password) {
+    if (hashedInput === settings.password) {
       console.log('[AUTH] Password verified successfully');
       res.json({ success: true, message: 'Password verified' });
     } else {
@@ -69,8 +69,12 @@ export const verifyPassword = (req, res) => {
 
 export const checkPasswordSet = (req, res) => {
   try {
-    res.json({ success: true, passwordSet: passwordStorage.passwordSet });
+    const settings = getSetting();
+    const passwordSet = settings && settings.passwordSet ? true : false;
+    console.log('[AUTH] checkPasswordSet - passwordSet:', passwordSet);
+    res.json({ success: true, passwordSet });
   } catch (error) {
+    console.error('[AUTH] checkPasswordSet error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -87,20 +91,27 @@ export const changePassword = (req, res) => {
       return res.status(400).json({ success: false, error: 'Password must be at least 4 characters' });
     }
 
-    if (!passwordStorage.passwordSet) {
+    const settings = getSetting();
+
+    if (!settings || !settings.passwordSet) {
       return res.status(400).json({ success: false, error: 'Password not configured yet' });
     }
 
     const hashedCurrent = hashPassword(currentPassword);
 
-    if (hashedCurrent !== passwordStorage.password) {
+    if (hashedCurrent !== settings.password) {
       return res.status(401).json({ success: false, error: 'Current password is incorrect' });
     }
 
-    passwordStorage.password = hashPassword(newPassword);
+    const hashedNew = hashPassword(newPassword);
+    updateSetting({
+      password: hashedNew,
+      passwordSet: true
+    });
 
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
+    console.error('[AUTH] changePassword error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
